@@ -1,52 +1,84 @@
-const express = require("express")
-const mongoose = require("mongoose")
-const cors = require("cors")
-const userModel = require("./models/Users")
+const express = require("express");
+const cors = require("cors");
+const { Client } = require("pg");
 
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-const app = express()
-app.use(cors())
+// PostgreSQL connection
+const client = new Client({
+  connectionString:
+    "postgresql://neondb_owner:npg_m89tudKGnjCz@ep-sparkling-recipe-aeryw8lm-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+});
 
-app.use(express.json())
+client
+  .connect()
+  .then(() => console.log("Connected to PostgreSQL"))
+  .catch((err) => console.error("PostgreSQL connection error", err));
 
-mongoose.connect("mongodb://0.0.0.0:27017/crud")
+// Routes
 
-app.get("/",(req,res)=>{
-    userModel.find({})
-    .then(users=>res.json(users))
-    .catch(err=>res.json(err))
-})
+// Get all users
+app.get("/", async (req, res) => {
+  try {
+    const result = await client.query("SELECT * FROM users");
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
 
-app.get("/getUser/:id",(req,res)=>{
-    const id = req.params.id;
-    userModel.findById({_id:id})
-    .then(users=>res.json(users))
-    .catch(err=>res.json(err))
-})
+// Get user by ID
+app.get("/getUser/:id", async (req, res) => {
+  try {
+    const result = await client.query("SELECT * FROM users WHERE id = $1", [
+      req.params.id,
+    ]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
 
-app.put('/update/:id', (req,res) => {
-    const id = req.params.id;
-    userModel.findByIdAndUpdate({_id: id}, {
-        name:req.body.name, 
-        email: req.body.email, 
-        age: req.body.age})
-    .then(users=>res.json(users))
-    .catch(err=>res.json(err))
-})
+// Update user
+app.put("/update/:id", async (req, res) => {
+  const { name, email, age } = req.body;
+  try {
+    const result = await client.query(
+      "UPDATE users SET name = $1, email = $2, age = $3 WHERE id = $4 RETURNING *",
+      [name, email, age, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
 
-app.delete('/delete/:id', (req,res)=>{
-    const id = req.params.id;
-    userModel.findByIdAndDelete({_id: id})
-    .then(res => res.json(res))
-    .catch(err => res.json(err))
-})
+// Delete user
+app.delete("/delete/:id", async (req, res) => {
+  try {
+    await client.query("DELETE FROM users WHERE id = $1", [req.params.id]);
+    res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
 
-app.post("/create",(req, res)=>{
-userModel.create(req.body).
-then(users => res.json(users)).
-catch(err => res.json(err))
-})
+// Create user
+app.post("/create", async (req, res) => {
+  const { name, email, age } = req.body;
+  try {
+    const result = await client.query(
+      "INSERT INTO users (name, email, age) VALUES ($1, $2, $3) RETURNING *",
+      [name, email, age]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
 
-app.listen(3001 , ()=>{
-    console.log("Server is running");
+app.listen(3001, () => {
+  console.log("Server is running");
 });
